@@ -10,6 +10,11 @@ import { FreelancerWorkspace } from './pages/FreelancerWorkspace';
 import { CAFirmWorkspace } from './pages/CAFirmWorkspace';
 import { DocumentUploadZone } from './components/DocumentUploadZone';
 import { DocumentQueue } from './pages/DocumentQueue';
+import { DocumentReview } from './pages/DocumentReview';
+import { Reconciliation } from './pages/Reconciliation';
+import { Ledgers } from './pages/Ledgers';
+import { GSTSummary } from './pages/GSTSummary';
+import { Integrations } from './pages/Integrations';
 import { AuditLog } from './pages/AuditLog';
 
 const queryClient = new QueryClient();
@@ -37,6 +42,11 @@ export const App: React.FC = () => {
             <Route path="clients" element={<CAFirmWorkspace />} />
             <Route path="documents/upload" element={<DocumentUploadZone />} />
             <Route path="documents" element={<DocumentQueue />} />
+            <Route path="review" element={<DocumentReview />} />
+            <Route path="reconciliation" element={<Reconciliation />} />
+            <Route path="ledgers" element={<Ledgers />} />
+            <Route path="gst" element={<GSTSummary />} />
+            <Route path="integrations" element={<Integrations />} />
             <Route path="audit" element={<AuditLog />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
