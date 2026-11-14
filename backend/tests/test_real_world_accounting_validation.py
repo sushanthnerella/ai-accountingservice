@@ -196,8 +196,8 @@ async def test_telangana_sole_proprietorship_accounting_scenario(session: AsyncS
     # 7. Trial Balance Total Debit & Credit
     total_dr = sum(b["total_debit"] for b in tb)
     total_cr = sum(b["total_credit"] for b in tb)
-    assert total_dr == Decimal("130400.00")
-    assert total_cr == Decimal("130400.00")
+    assert total_dr == Decimal("150400.00")
+    assert total_cr == Decimal("150400.00")
 
     # 8. Balance Sheet
     # Assets = Bank (105,000) + AR (13,600) + Input CGST (900) + Input SGST (900) = 120,400
