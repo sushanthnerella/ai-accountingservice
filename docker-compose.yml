@@ -11,6 +11,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d accounting_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -20,6 +25,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
@@ -27,6 +37,12 @@ services:
       dockerfile: backend/Dockerfile
     container_name: accounting_api
     restart: always
+    command: >
+      sh -c "cd /app/backend &&
+             alembic upgrade head &&
+             python scripts/seed.py &&
+             cd /app &&
+             uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
     environment:
       - APP_ENV=production
       - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@postgres:5432/accounting_db
@@ -35,14 +51,23 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - SECRET_KEY=supersecretkey-accounting-production-token-98765
       - LOCAL_STORAGE_PATH=/data/storage
+      - STORAGE_ENCRYPTION_KEY=32-bytes-encryption-key-local-123!
       - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - CELERY_TASK_ALWAYS_EAGER=${CELERY_TASK_ALWAYS_EAGER:-false}
     volumes:
       - storage_data:/data/storage
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   celery_worker:
     build:
@@ -57,13 +82,22 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=supersecretkey-accounting-production-token-98765
       - LOCAL_STORAGE_PATH=/data/storage
+      - STORAGE_ENCRYPTION_KEY=32-bytes-encryption-key-local-123!
       - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
     volumes:
       - storage_data:/data/storage
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build:

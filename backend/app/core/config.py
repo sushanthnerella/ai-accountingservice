@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     LOCAL_STORAGE_PATH: str = "/tmp/accounting_storage"
     STORAGE_ENCRYPTION_KEY: str = "32-bytes-encryption-key-local-123!"
 
+    # Multi-modal LLM / OCR Engine Integration
+    OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    LLM_BASE_URL: Optional[str] = None
+    LLM_MODEL: str = "gpt-4o"
+    CELERY_TASK_ALWAYS_EAGER: bool = False
+
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_REGION: str = "ap-south-1"

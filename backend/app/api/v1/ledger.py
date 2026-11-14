@@ -1,6 +1,8 @@
 import uuid
+from datetime import date
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,9 @@ from backend.app.api.deps import get_current_user, get_tenant_context
 from backend.app.models.user import User
 
 router = APIRouter(prefix="/ledger", tags=["Ledger"])
+
+class ReversalRequest(BaseModel):
+    reason: str = "Accounting correction / cancellation"
 
 @router.post("/accounts", response_model=ResponseEnvelope[COAResponse], status_code=status.HTTP_201_CREATED)
 async def create_coa(
@@ -81,8 +86,11 @@ async def create_entry(
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "UNBALANCED_ENTRY", "message": str(e)})
 
-@router.get("/trial-balance", response_model=ResponseEnvelope[List[Dict[str, Any]]])
-async def get_trial_balance(
+@router.post("/entries/{entry_id}/reverse", response_model=ResponseEnvelope[JournalEntryResponse])
+async def reverse_entry(
+    entry_id: uuid.UUID,
+    payload: ReversalRequest,
+    user: User = Depends(get_current_user),
     tenant_ctx: tuple[Optional[uuid.UUID], Optional[uuid.UUID]] = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db)
 ):
@@ -90,5 +98,60 @@ async def get_trial_balance(
     if not org_id or not client_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "HEADER_MISSING", "message": "Tenant headers required"})
 
-    tb = await LedgerService.get_trial_balance(db, org_id, client_id)
+    try:
+        reversal = await LedgerService.create_reversal_entry(
+            db=db,
+            original_entry_id=entry_id,
+            user_id=user.id,
+            reason=payload.reason
+        )
+        await db.commit()
+        await db.refresh(reversal, ["lines"])
+        return ResponseEnvelope(data=JournalEntryResponse.model_validate(reversal), message="Reversal journal entry posted")
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "REVERSAL_FAILED", "message": str(e)})
+
+@router.get("/trial-balance", response_model=ResponseEnvelope[List[Dict[str, Any]]])
+async def get_trial_balance(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    include_zero_balances: bool = Query(False),
+    tenant_ctx: tuple[Optional[uuid.UUID], Optional[uuid.UUID]] = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db)
+):
+    org_id, client_id = tenant_ctx
+    if not org_id or not client_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "HEADER_MISSING", "message": "Tenant headers required"})
+
+    tb = await LedgerService.get_trial_balance(
+        db, org_id, client_id, start_date=start_date, end_date=end_date, include_zero_balances=include_zero_balances
+    )
     return ResponseEnvelope(data=tb)
+
+@router.get("/profit-and-loss", response_model=ResponseEnvelope[Dict[str, Any]])
+async def get_profit_and_loss(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    tenant_ctx: tuple[Optional[uuid.UUID], Optional[uuid.UUID]] = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db)
+):
+    org_id, client_id = tenant_ctx
+    if not org_id or not client_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "HEADER_MISSING", "message": "Tenant headers required"})
+
+    pnl = await LedgerService.get_profit_and_loss(db, org_id, client_id, start_date=start_date, end_date=end_date)
+    return ResponseEnvelope(data=pnl)
+
+@router.get("/balance-sheet", response_model=ResponseEnvelope[Dict[str, Any]])
+async def get_balance_sheet(
+    as_of_date: Optional[date] = Query(None),
+    tenant_ctx: tuple[Optional[uuid.UUID], Optional[uuid.UUID]] = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db)
+):
+    org_id, client_id = tenant_ctx
+    if not org_id or not client_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "HEADER_MISSING", "message": "Tenant headers required"})
+
+    bs = await LedgerService.get_balance_sheet(db, org_id, client_id, as_of_date=as_of_date)
+    return ResponseEnvelope(data=bs)

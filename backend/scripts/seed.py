@@ -1,11 +1,48 @@
 import asyncio
 import uuid
+from sqlalchemy import select
 from backend.app.db.session import AsyncSessionLocal
 from backend.app.services.auth_service import AuthService
 from backend.app.services.organization_service import OrganizationService
 from backend.app.services.client_service import ClientService
 from backend.app.models.organization import OrganizationType
-from backend.app.models.client_business import BusinessType
+from backend.app.models.client_business import BusinessType, ClientBusiness
+from backend.app.models.ledger import ChartOfAccount, AccountType
+
+STANDARD_ACCOUNTS = [
+    ("1001", "Current Bank Account", AccountType.ASSET),
+    ("1002", "Accounts Receivable", AccountType.ASSET),
+    ("1003", "Input CGST", AccountType.ASSET),
+    ("1004", "Input SGST", AccountType.ASSET),
+    ("1005", "Input IGST", AccountType.ASSET),
+    ("1006", "TDS Receivable (Sec 194)", AccountType.ASSET),
+    ("2001", "Accounts Payable", AccountType.LIABILITY),
+    ("2002", "Output CGST", AccountType.LIABILITY),
+    ("2003", "Output SGST", AccountType.LIABILITY),
+    ("2004", "Output IGST", AccountType.LIABILITY),
+    ("3001", "Owner Capital", AccountType.EQUITY),
+    ("4001", "Operating Revenue", AccountType.INCOME),
+    ("5001", "Operating Expenses", AccountType.EXPENSE),
+    ("5002", "Round Off Adjustment", AccountType.EXPENSE),
+]
+
+async def seed_chart_of_accounts_for_client(session, org_id: uuid.UUID, client_id: uuid.UUID):
+    for code, name, acc_type in STANDARD_ACCOUNTS:
+        q = select(ChartOfAccount).where(
+            ChartOfAccount.client_business_id == client_id,
+            ChartOfAccount.account_code == code
+        )
+        existing = (await session.execute(q)).scalar_one_or_none()
+        if not existing:
+            acc = ChartOfAccount(
+                organization_id=org_id,
+                client_business_id=client_id,
+                account_code=code,
+                account_name=name,
+                account_type=acc_type
+            )
+            session.add(acc)
+    await session.flush()
 
 async def seed_data():
     print("Seeding initial realistic Indian accounting test fixtures...")
@@ -26,7 +63,7 @@ async def seed_data():
                 slug="rohan-consulting",
                 org_type=OrganizationType.FREELANCER
             )
-            await ClientService.create_client_business(
+            freelancer_client = await ClientService.create_client_business(
                 session,
                 organization_id=freelancer_org.id,
                 user_id=freelancer_user.id,
@@ -38,7 +75,8 @@ async def seed_data():
                 state_code="27",
                 is_composition_scheme=False
             )
-            print("Freelancer persona seeded.")
+            await seed_chart_of_accounts_for_client(session, freelancer_org.id, freelancer_client.id)
+            print("Freelancer persona and Chart of Accounts seeded.")
         except Exception as e:
             print(f"Skipping freelancer seed or exists: {e}")
 
@@ -59,7 +97,7 @@ async def seed_data():
                 org_type=OrganizationType.CA_FIRM
             )
             # Add 2 Client businesses under CA firm
-            await ClientService.create_client_business(
+            c1 = await ClientService.create_client_business(
                 session,
                 organization_id=ca_org.id,
                 user_id=ca_user.id,
@@ -71,7 +109,9 @@ async def seed_data():
                 state_code="27",
                 is_composition_scheme=False
             )
-            await ClientService.create_client_business(
+            await seed_chart_of_accounts_for_client(session, ca_org.id, c1.id)
+
+            c2 = await ClientService.create_client_business(
                 session,
                 organization_id=ca_org.id,
                 user_id=ca_user.id,
@@ -83,7 +123,9 @@ async def seed_data():
                 state_code="29",
                 is_composition_scheme=True
             )
-            print("CA Firm persona with multiple client businesses seeded.")
+            await seed_chart_of_accounts_for_client(session, ca_org.id, c2.id)
+
+            print("CA Firm persona with multiple clients and Chart of Accounts seeded.")
         except Exception as e:
             print(f"Skipping CA firm seed or exists: {e}")
 

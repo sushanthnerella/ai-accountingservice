@@ -3,13 +3,28 @@ import pytest
 from typing import AsyncGenerator
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
+from backend.app.core.config import settings
+
+# Force test configuration
+settings.APP_ENV = "test"
+settings.CELERY_TASK_ALWAYS_EAGER = True
+settings.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
 from backend.app.main import app
 from backend.app.db.base import Base
 from backend.app.db.session import get_db
+import backend.app.db.session as session_module
+import backend.app.tasks.document_tasks as doc_tasks_module
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+test_engine = create_async_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+    echo=False
+)
 TestingSessionLocal = async_sessionmaker(
     bind=test_engine,
     class_=AsyncSession,
@@ -17,6 +32,11 @@ TestingSessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False
 )
+
+# Patch AsyncSessionLocal so background tasks and services use the in-memory SQLite test database
+session_module.AsyncSessionLocal = TestingSessionLocal
+session_module.engine = test_engine
+doc_tasks_module.AsyncSessionLocal = TestingSessionLocal
 
 @pytest.fixture(scope="session")
 def event_loop():

@@ -9,7 +9,7 @@ from backend.app.api.deps import get_tenant_context
 router = APIRouter(prefix="/integrations/tally", tags=["TallyPrime Integration"])
 
 @router.get("/export-xml")
-async def export_tally_xml(
+async def export_tally_package_xml(
     tenant_ctx: tuple[Optional[uuid.UUID], Optional[uuid.UUID]] = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db)
 ):
@@ -17,9 +17,41 @@ async def export_tally_xml(
     if not org_id or not client_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "HEADER_MISSING", "message": "Tenant headers required"})
 
-    xml_content = await TallyService.generate_tally_xml(db, org_id, client_id)
+    xml_content = await TallyService.generate_tally_package_xml(db, org_id, client_id)
     return Response(
         content=xml_content,
         media_type="application/xml",
-        headers={"Content-Disposition": f"attachment; filename=tally_vouchers_{client_id}.xml"}
+        headers={"Content-Disposition": f"attachment; filename=Tally_Complete_Package_{client_id}.xml"}
+    )
+
+@router.get("/export-masters-xml")
+async def export_tally_masters_xml(
+    tenant_ctx: tuple[Optional[uuid.UUID], Optional[uuid.UUID]] = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db)
+):
+    org_id, client_id = tenant_ctx
+    if not org_id or not client_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "HEADER_MISSING", "message": "Tenant headers required"})
+
+    xml_content = await TallyService.generate_tally_masters_xml(db, org_id, client_id)
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": f"attachment; filename=Masters_{client_id}.xml"}
+    )
+
+@router.get("/export-vouchers-xml")
+async def export_tally_vouchers_xml(
+    tenant_ctx: tuple[Optional[uuid.UUID], Optional[uuid.UUID]] = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db)
+):
+    org_id, client_id = tenant_ctx
+    if not org_id or not client_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error_code": "HEADER_MISSING", "message": "Tenant headers required"})
+
+    xml_content = await TallyService.generate_tally_vouchers_xml(db, org_id, client_id)
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": f"attachment; filename=Vouchers_{client_id}.xml"}
     )
